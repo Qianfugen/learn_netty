@@ -52,3 +52,76 @@ Netty使用了Java NIO，避免了以上问题
 ![image-20201028232710848](img/image-20201028232710848.png)
 
 事件被分发给ChannelHandler类中的方法，Netty处理链可以对事件进行过滤筛选，执行相应的动作。
+
+
+
+
+
+### Chapter2-你的第一款Netty应用程序
+
+#### 1.Netty客户端和服务端示意图
+
+实现功能：客户端发啥消息，服务端返回同样的消息，体现**请求-响应交互模式**
+
+![image-20201104003246013](img/image-20201104003246013.png)
+
+#### 2.编写Echo服务器
+
+- ChannelHandler: 处理客户端发送数的据，及业务逻辑
+
+- 引导：配置服务器的启动代码
+
+  很好体现了**解耦**思想，将业务逻辑与网络处理代码分离，分成两部分
+
+##### 2.1 ChannelHandler和业务逻辑
+
+- channelRead() : 对于每个传入的消息都要调用
+- channelReadComplete() : 通知ChannelInboundHandler最后一次对channelRead()的调用是当前批量读取中的最后一条消息
+- exceptionCaught() :  在读取操作期间，有异常抛出时会调用
+
+**EchoServerHandler**
+
+![image-20201104004439969](img/image-20201104004439969.png)
+
+ChannelInboundHandlerAdapter 有一个直观的 API，并且**它的每个方法都可以被重写以挂钩到事件生命周期的恰当点上**
+
+##### 2.2 引导服务器
+
+- 绑定监听端口，并接受传入的连接请求
+- 配置 Channel ，以将有关的入站消息通知给 EchoServerHandler 实例
+
+**EchoServer**
+
+![image-20201104004707361](img/image-20201104004707361.png)
+
+- 创建一个```ServerBootstrap```的实例以引导和绑定服务器
+
+- 创建并分配一个```NioEventLoopGroup```实例以进行事件的处理，如接受新连接或读写数据
+- 指定服务器绑定的本地的 ```InetSocketAddress```
+- 使用一个 ```EchoServerHandler ```的实例初始化每一个新的 Channel
+- 调用 ```ServerBootstrap.bind()```方法以绑定服务器
+
+#### 3. 编写Echo客户端
+
+##### 3.1 ChannelHandler和业务逻辑
+
+- channelActive(): 在与服务器的连接建立之后被调用
+- channelRead0(): 当从服务器接收到一条消息时被调用
+- exceptionCaught(): 在处理过程中引发异常时被调用
+
+**EchoClientHandler**
+
+![image-20201104004734867](img/image-20201104004734867.png)
+
+##### 3.2 引导客户端
+
+**EchoClient**
+
+![image-20201104004827401](img/image-20201104004827401.png)
+
+- 为初始化客户端，创建了一个``` Bootstrap ```实例
+- 为进行事件处理分配了一个``` NioEventLoopGroup ```实例，其中事件处理包括**创建新的连接以及处理入站和出站数据**
+- 为服务器连接创建了一个 ```InetSocketAddress ```实例
+- 当连接被建立时，一个 ```EchoClientHandler``` 实例会被安装到（该 Channel 的）```ChannelPipeline``` 中
+- 在一切都设置完成后，调用 ```Bootstrap.connect()```方法连接到远程节点
+

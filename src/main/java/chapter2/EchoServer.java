@@ -38,7 +38,6 @@ public class EchoServer {
                             ch.pipeline().addLast(serverHandler);
                         }
                     });
-
             ChannelFuture cf = b.bind().sync();
             System.out.println("EchoServer start...");
             cf.channel().closeFuture().sync();
@@ -48,5 +47,4 @@ public class EchoServer {
             group.shutdownGracefully().sync();
         }
     }
-
 }
