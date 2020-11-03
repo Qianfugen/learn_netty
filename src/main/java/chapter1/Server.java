@@ -35,7 +35,6 @@ public class Server {
             new Thread(this).start();
         }
 
-        @Override
         public void run() {
             try {
                 // 读取客户端发来的消息
