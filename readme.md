@@ -125,3 +125,88 @@ ChannelInboundHandlerAdapter 有一个直观的 API，并且**它的每个方法
 - 当连接被建立时，一个 ```EchoClientHandler``` 实例会被安装到（该 Channel 的）```ChannelPipeline``` 中
 - 在一切都设置完成后，调用 ```Bootstrap.connect()```方法连接到远程节点
 
+### Chapter3-Netty的组件和设计
+
+#### 1. Channel接口
+
+基本的 I/O 操作（bind()、connect()、read()和 write()）依赖于底层网络传输所提供的原语。
+
+eg:
+
+- EmbeddedChannel
+- LocalServerChannel
+- NioDatagramChannel
+- NioSctcpChannel
+- NioSocketChannel
+
+#### 2. EventLoop
+
+EventLoop定义了Netty的核心抽象，用于处理连接的生命周期所发生的事件。
+
+![image-20201108235943161](img/image-20201108235943161.png)
+
+- 一个`EventLoopGroup`包括一个或多个`EventLoop`
+- 一个`EventLoop`在它的生命周期内只和一个`Thread`绑定
+- 所有由`EventLoop`处理的I/O事件都将在它专有的Thread上处理
+- 一个`Channel`在它的生命周期内只注册于一个`EventLoop`
+- 一个EventLoop可能会被分配给一个或多个`Channel`
+
+#### 3. ChannelFuture接口
+
+Netty 中所有的 I/O 操作都是异步的。因为一个操作可能不会立即返回，所以我们需要一种用于在之后的某个时间点确定其结果的方法。为此，Netty 提供了ChannelFuture 接口，其 addListener()方法注册了一个 ChannelFutureListener，以便在某个操作完成时（无论是否成功）得到通知。
+
+#### 4. ChannelHandler接口
+
+ChannelHandler充当了所有处理入站和出站数据的应用程序逻辑的容器。
+
+例如将数据从一种格式转换为另外一种格式，或者处理转换过程中所抛出的异常。
+
+#### 5. ChannelPipeline接口
+
+ChannelPipeline 提供了 ChannelHandler 链的容器，并定义了用于在该链上传播入站和出站事件流的 API。当 Channel 被创建时，它会被自动地分配到它专属的 ChannelPipeline。
+
+ChannelHandler安装到ChannelPipeline中的过程如下：
+
+- 一个`ChannelInitializer`的实现被注册到了`ServerBootstrap`中
+- 当 `ChannelInitializer.initChannel()`方法被调用时，ChannelInitializer将在 ChannelPipeline 中安装一组自定义的 ChannelHandler
+- `ChannelInitializer` 将它自己从 `ChannelPipeline` 中移除
+
+Netty应用程序入站和出站数据流
+
+![image-20201109002159692](img/image-20201109002159692.png)
+
+**入站**：一个入站消息被读取，那么它会从 ChannelPipeline 的头部开始流动，并被传递给第一个 ChannelInboundHandler。这个 ChannelHandler 不一定会实际地修改数据，具体取决于它的具体功能，在这之后，数据将会被传递给链中的下一个ChannelInboundHandler。最终，数据将会到达 ChannelPipeline 的尾端，届时，所有处理就都结束了。
+
+**出站**：数据将从ChannelOutboundHandler 链的尾端开始流动，直到它到达链的头部为止。在这之后，出站数据将会到达网络传输层，这里显示为 Socket。通常情况下，这将触发一个写操作。
+
+在Netty中，有两种发送消息的方式。
+
+1. 你可以直接写到`Channel`中，将会导致消息从Channel-Pipeline 的尾端开始流动
+2. 也可以 写到和Channel-Handler相关联的`ChannelHandlerContext`对象中，导致消息从 ChannelPipeline 中的下一个 Channel-Handler 开始流动
+
+常用的适配器类
+
+- `ChannelHandlerAdapter`: 处理入站和出站消息
+- `ChannelInboundHandlerAdapter`: 处理入站消息
+- `ChannelOutboundHandlerAdapter`: 处理出站消息
+- `ChannelDuplexHandler`: 收发消息
+
+![image-20201109005048076](img/image-20201109005048076.png)
+
+解码器：将netty接收的字节数组转成另一种格式，通常是一个Java对象
+
+编码器：跟解码器相反，将一个对象转成字节数组
+
+#### 6. 引导
+
+Netty 的引导类为应用程序的网络层配置提供了容器，这涉及将一个进程绑定到某个指定的端口（服务器引导）
+
+或者将一个进程连接到另一个运行在某个指定主机的指定端口上的进程（客户端引导）。
+
+![image-20201109005829286](img/image-20201109005829286.png)
+
+因为服务器需要两组不同的 Channel。第一组将只包含一个 ServerChannel，代表服务器自身的已绑定到某个本地端口的正在监听的套接字。而第二组将包含所有已创建的用来处理传入客户端连接（对于每个服务器已经接受的连接都有一个）的 Channel。
+
+![image-20201109010157044](img/image-20201109010157044.png)
+
+与 ServerChannel 相关联的 EventLoopGroup 将分配一个负责为传入连接请求创建Channel 的 EventLoop。一旦连接被接受，第二个 EventLoopGroup 就会给它的 Channel分配一个 EventLoop。
