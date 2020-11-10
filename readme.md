@@ -210,3 +210,112 @@ Netty 的引导类为应用程序的网络层配置提供了容器，这涉及�
 ![image-20201109010157044](img/image-20201109010157044.png)
 
 与 ServerChannel 相关联的 EventLoopGroup 将分配一个负责为传入连接请求创建Channel 的 EventLoop。一旦连接被接受，第二个 EventLoopGroup 就会给它的 Channel分配一个 EventLoop。
+
+### Chapter4-传输
+
+#### 1. 传输迁移
+
+##### 1.1 未使用netty的OIO网络编程
+
+![image-20201110222152464](img/image-20201110222152464.png)
+
+##### 1.2 未使用netty的NIO网络编程
+
+![image-20201110222410952](img/image-20201110222410952.png)
+
+##### 1.3 使用netty的OIO网络编程
+
+![image-20201110222516945](img/image-20201110222516945.png)
+
+##### 1.4 使用netty的NIO网络编程
+
+![image-20201110222631860](img/image-20201110222631860.png)
+
+显而易见，java原生的OIO和NIO网络编程变化很大，复杂难用。但是netty的OIO和NIO网络编程，为每种传输的实现都暴露了相同的 API，所以无论选用哪一种传输的实现，你的代码都仍然几乎不受影响。
+
+#### 2. 传输API
+
+![image-20201110224333245](img/image-20201110224333245.png)
+
+每个 Channel 都将会被分配一个 `ChannelPipeline` 和 `ChannelConfig`。
+
+ChannelConfig 包含了该 Channel 的所有配置设置，并且支持热更新。
+
+ChannelPipeline 持有所有将应用于入站和出站数据以及事件的 ChannelHandler 实例，这些 ChannelHandler 实现了应用程序用于处理状态变化以及数据处理的逻辑。
+
+**ChannelHandler的典型用途：**
+
+- 将数据从一种格式转成另一种格式
+- 提供异常的通知
+- 提供Channel变为活动或非活动的通知
+- 提供当Channel注册到EventLoop或者从EventLoop注销时的通知
+- 提供有关用户自定义事件的通知
+
+**拦截过滤器**：ChannelPipeline 实现了一种常见的设计模式 — 拦截过滤器（Intercepting Filter）。UNIX 管道是另外一个熟悉的例子：多个命令被链接在一起，其中一个命令的输出端将连接到命令行中下一个命令的输入端。
+
+![image-20201110224243277](img/image-20201110224243277.png)
+
+#### 3. 内置的传输
+
+​																**Netty所提供的传输**
+
+| 名称     | 包                          | 描述                                                         |
+| -------- | --------------------------- | ------------------------------------------------------------ |
+| NIO      | io.netty.channel.socket.nio | 使用 java.nio.channels 包作为基础——基于<br/>选择器的方式     |
+| Epoll    | io.netty.channel.epoll      | 由 JNI 驱动的 epoll() 和非阻塞 IO。这个传输支持<br/>只有在Linux上可用的多种特性，如 SO_REUSEPORT ，<br/>比NIO 传输更快，而且是完全非阻塞的 |
+| OIO      | io.netty.channel.socket.oio | 使用 java.net 包作为基础——使用阻塞流                         |
+| Local    | io.netty.channel.local      | 可以在 VM 内部通过管道进行通信的本地传输                     |
+| Embedded | io.netty.channel.embedded   | Embedded 传输，允许使用 ChannelHandler 而又<br/>不需要一个真正的基于网络的传输。这在测试你的<br/>ChannelHandler 实现时非常有用 |
+
+##### 3.1 NIO-非阻塞I/O
+
+NIO 提供了一个所有 I/O 操作的全异步的实现，选择器Selector充当一个注册表。
+
+![image-20201110225221714](img/image-20201110225221714.png)
+
+![image-20201110232926060](img/image-20201110232926060.png)
+
+![image-20201110234209901](img/image-20201110234209901.png)
+
+![image-20201110235156473](img/image-20201110235156473.png)
+
+![image-20201110235809946](img/image-20201110235809946.png)
+
+![image-20201110235856288](img/image-20201110235856288.png)
+
+
+
+1. 当客户端连接时，会通过`ServerSocketChannel`得到`SocketChannel`
+2. 将SocketChannel注册到`Selector`上，`register(Selector sel, int ops)`，一个Selector可以注册多个SocketChannel
+3. 注册后返回一个SelectionKey，会和该Selector关联（集合）
+4. Selector进行监听，`select()`，返回有事件发生的通道个数
+5. 进一步得到各个`SelectionKey`(有事件发生时)
+6. 在通过SelectionKey的`channel()`反向获取SocketChannel
+7. 可以通过得到的channel，完成业务处理
+
+##### 3.2 Epoll — 用于 Linux 的本地非阻塞传输
+
+**高负载下性能更佳，优于JDK的NIO实现**
+
+Linux作为高性能网络编程的平台，其重要性与日俱增，这催生了大量先进特性的开发，其中包括**epoll——一个高度可扩展的I/O事件通知特性**。这个API自Linux内核版本 2.5.44（2002）被引入，提供了比旧的POSIX select和poll系统调用更好的性能，同时现在也是Linux上非阻塞网络编程的事实标准。
+
+##### 3.3 OIO — 旧的阻塞 I/O
+
+Netty 的 OIO 传输实现代表了一种折中：它可以通过常规的传输 API 使用，但是由于它是建立在 java.net 包的阻塞实现之上的，所以它不是异步的。
+
+Netty是如何能够使用和用于异步传输相同的API来支持OIO的呢？
+答案就是，Netty利用了SO_TIMEOUT这个Socket标志，它指定了等待一个I/O操作完成的最大毫秒数。如果操作在指定的时间间隔内没有完成，则将会抛出一个SocketTimeout Exception。Netty将捕获这个异常并继续处理循环。在EventLoop下一次运行时，它将再次尝试。
+
+![image-20201111002226346](img/image-20201111002226346.png)
+
+#### 4. 传输的用例
+
+​																				**应用程序的最佳传输**
+
+| 应用程序的需求                 | 推荐的传输                  |
+| ------------------------------ | --------------------------- |
+| 非阻塞代码库或者一个常规的起点 | NIO(或者在Linux上使用Epoll) |
+| 阻塞代码库                     | OIO                         |
+| 在同一个JVM内部的通信          | Local                       |
+| 测试ChannelHandler的实现       | Embedded                    |
+
