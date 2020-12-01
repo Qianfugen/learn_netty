@@ -319,3 +319,158 @@ Netty是如何能够使用和用于异步传输相同的API来支持OIO的呢？
 | 在同一个JVM内部的通信          | Local                       |
 | 测试ChannelHandler的实现       | Embedded                    |
 
+### Chapter5-ByteBuf
+
+##### 1. ByteBuf API的优点
+
+- 自定义缓冲区类型扩展
+- 零拷贝
+- 容量按需增长
+- 读写模式不需要调用ByteBuffer的flip()切换
+- 读写索引分离
+- 支持方法的链式调用
+- 支持引用计数
+- 支持池化
+- ...
+
+##### 2.ByteBuf类-Netty的数据容器
+
+**工作模式**
+
+ByteBuf 维护了两个不同的索引：一个用于读取，一个用于写入。当你从 ByteBuf 读取时，它的 readerIndex 将会被递增已经被读取的字节数。同样地，当你写入 ByteBuf 时，它的writerIndex 也会被递增。
+
+![image-20201201232811821](img/image-20201201232811821.png)
+
+**使用模式**
+
+1. 堆缓冲区
+
+   最常用的 ByteBuf 模式是将数据存储在 JVM 的堆空间中。这种模式被称为支撑数组（backing array），它能在没有使用池化的情况下提供快速的分配和释放
+
+2. 直接缓冲区
+
+   直接缓冲区是另外一种 ByteBuf 模式。我们期望用于对象创建的内存分配永远都来自于堆中，但这并不是必须的——NIO 在 JDK 1.4 中引入的 ByteBuffer 类允许 JVM 实现通过本地调用来分配内存。
+
+3. 复合缓冲区
+
+   第三种也是最后一种模式使用的是复合缓冲区，它为多个 ByteBuf 提供一个聚合视图。在这里你可以根据需要添加或者删除 ByteBuf 实例，这是一个 JDK 的 ByteBuffer 实现完全缺失的特性。
+   Netty 通过一个 ByteBuf 子类——CompositeByteBuf ——实现了这个模式，它提供了一个将多个缓冲区表示为单个合并缓冲区的虚拟表示。
+
+   ![image-20201201234151148](img/image-20201201234151148.png)
+
+##### 3.字节级操作
+
+1. 随机访问索引
+
+   ![image-20201201234932610](img/image-20201201234932610.png)
+
+2. 顺序访问索引
+
+   虽然 ByteBuf 同时具有读索引和写索引，但是 JDK 的 ByteBuffer 却只有一个索引，这也就是为什么必须调用 flip()方法来在读模式和写模式之间进行切换的原因。图 5-3 展示了ByteBuf 是如何被它的两个索引划分成 3 个区域的。
+
+   ![image-20201201235053015](img/image-20201201235053015.png)
+
+3. 可丢弃字节
+
+   在图 5-3 中标记为可丢弃字节的分段包含了已经被读过的字节。通过调用 discardReadBytes()方法，可以丢弃它们并回收空间。这个分段的初始大小为 0，存储在 readerIndex 中，会随着 read 操作的执行而增加。
+
+   缓冲区上调用discardReadBytes()方法后的结果。可以看到，可丢弃字节分段中的空间已经变为可写的了
+
+   ![image-20201201235427423](img/image-20201201235427423.png)
+
+4. 可读字节
+
+   ByteBuf 的可读字节分段存储了实际数据。新分配的、包装的或者复制的缓冲区的默认的readerIndex 值为 0。任何名称以 read 或者 skip 开头的操作都将检索或者跳过位于当前readerIndex 的数据，并且将它增加已读字节数。
+
+   ![image-20201201235924039](img/image-20201201235924039.png)
+
+5. 可写字节
+
+   可写字节分段是指一个拥有未定义内容的、写入就绪的内存区域。新分配的缓冲区的writerIndex 的默认值为 0。任何名称以 write 开头的操作都将从当前的 writerIndex 处开始写数据，并将它增加已经写入的字节数。如果写操作的目标也是 ByteBuf，并且没有指定源索引的值，则源缓冲区的 readerIndex 也同样会被增加相同的大小。
+
+   ![image-20201202000624487](img/image-20201202000624487.png)
+
+6. 索引管理
+
+   可以通过调用markReaderIndex()、markWriterIndex()、resetWriterIndex()和 resetReaderIndex()来标记和重置 ByteBuf 的 readerIndex 和 writerIndex。
+
+   可以通过调用 clear()方法来将 readerIndex 和 writerIndex 都设置为 0。注意，这并不会清除内存中的内容。
+
+   ![image-20201202000916383](img/image-20201202000916383.png)
+
+   ![image-20201202000927680](img/image-20201202000927680.png)
+
+7. 查找操作
+
+   在 ByteBuf中有多种可以用来确定指定值的索引的方法。最简单的是使用indexOf()方法。
+
+   ![image-20201202001703544](img/image-20201202001703544.png)
+
+8. 派生缓冲区
+
+   派生缓冲区为 ByteBuf 提供了以专门的方式来呈现其内容的视图。这类视图是通过以下方法被创建的
+
+   - duplicate()
+   - slice()
+   - slice(int, int)
+   - Unpooled.unmodifiableBuffer(...)
+   - order(ByteOrder)
+   - readSlice(int)
+
+   ![image-20201202002656706](img/image-20201202002656706.png)
+
+   ![image-20201202002943685](img/image-20201202002943685.png)
+
+9. 读/写操作
+
+   正如我们所提到过的，有两种类别的读/写操作：
+
+   - get()和 set()操作，从给定的索引开始，并且保持索引不变；
+   - read()和 write()操作，从给定的索引开始，并且会根据已经访问过的字节数对索引进行调整。
+
+   ![image-20201202003513031](img/image-20201202003513031.png)
+
+   ![image-20201202003702455](img/image-20201202003702455.png)
+
+   ![image-20201202003814551](img/image-20201202003814551.png)
+
+   ![image-20201202003839878](img/image-20201202003839878.png)
+
+##### 4.ByteBufHolder 接口
+
+我们经常发现，除了实际的数据负载之外，我们还需要存储各种属性值。HTTP 响应便是一个很好的例子，除了表示为字节的内容，还包括状态码、cookie 等。为了处理这种常见的用例，Netty 提供了 ByteBufHolder。ByteBufHolder 也为 Netty 的高级特性提供了支持，如缓冲区池化，其中可以从池中借用 ByteBuf，并且在需要时自动释放。
+
+如果想要实现一个将其有效负载存储在 ByteBuf 中的消息对象，那么 ByteBufHolder 将是个不错的选择。
+
+![image-20201202004333182](img/image-20201202004333182.png)
+
+##### 5.ByteBuf 分配
+
+1. 按需分配：ByteBufAllocator 接口
+
+   为了降低分配和释放内存的开销，Netty 通过 interface ByteBufAllocator 实现了（ByteBuf 的）池化，它可以用来分配我们所描述过的任意类型的 ByteBuf 实例。
+
+   ![image-20201202004731378](img/image-20201202004731378.png)
+
+2. Unpooled 缓冲区
+
+   Netty 提供了一个简单的称为 Unpooled 的工具类，它提供了静态的辅助方法来创建未池化的 ByteBuf实例。
+
+   ![image-20201202004850235](img/image-20201202004850235.png)
+
+3. ByteBufUtil 类
+
+   ByteBufUtil 提供了用于操作 ByteBuf 的静态的辅助方法。
+
+    `hexdump()`方法，它以十六进制的表示形式打印ByteBuf 的内容。这在各种情况下都很有用，例如，出于调试的目的记录 ByteBuf 的内容。十六进制的表示通常会提供一个比字节值的直接表示形式更加有用的日志条目，此外，十六进制的版本还可以很容易地转换回实际的字节表示。
+
+    `boolean equals(ByteBuf, ByteBuf)`，它被用来判断两个 ByteBuf实例的相等性。
+
+##### 6.引用计数
+
+引用计数是一种通过在某个对象所持有的资源不再被其他对象引用时释放该对象所持有的资源来优化内存使用和性能的技术。
+
+引用计数背后的想法并不是特别的复杂；它主要涉及跟踪到某个特定对象的活动引用的数量。一个ReferenceCounted 实现的实例将通常以活动的引用计数为 1 作为开始。只要引用计数大于 0，就能保证对象不会被释放。当活动引用的数量减少到 0 时，该实例就会被释放。
+
+![image-20201202005412596](img/image-20201202005412596.png)
+
