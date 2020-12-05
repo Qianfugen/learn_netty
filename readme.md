@@ -474,3 +474,178 @@ ByteBuf 维护了两个不同的索引：一个用于读取，一个用于写入
 
 ![image-20201202005412596](img/image-20201202005412596.png)
 
+### Chapter6-ChannelHandler&ChannelPipeline
+
+##### 1. ChannelHandler接口
+
+###### 1.1. Channel的生命周期
+
+| 状态                | 描述                                      |
+| ------------------- | ----------------------------------------- |
+| ChannelUnregistered | Channel已被创建，但未被注册到EventLoop    |
+| ChannelRegistered   | Channel已被注册到EventLoop                |
+| ChannelActive       | Channel处于活动状态，可以接收和发送数据了 |
+| ChannelInactive     | Channel没有连接到远程节点                 |
+
+![image-20201203234056579](img/image-20201203234056579.png)
+
+###### 1.2. ChannelHandler的生命周期
+
+| 类型            | 描述                                              |
+| --------------- | ------------------------------------------------- |
+| handlerAdded    | 当把ChannelHandler添加到ChannelPipeline中时被调用 |
+| handlerRemoved  | 当ChannelHandler被从ChannelPipeline中移除时调用   |
+| exceptionCaught | 当处理过程中在ChannelPipeline中有错误产生时被调用 |
+
+###### 1.3.ChannelInboundHandler接口
+
+| 类型                      | 描述                                                         |
+| ------------------------- | ------------------------------------------------------------ |
+| channelRegistered         | 当Channel注册到它的EventLoop并且能够处理I/O时被调用          |
+| channelUnregistered       | 当Channel从它的EventLoop注销并不能处理I/O时调用              |
+| channelActive             | 当Channel处于活动状态时被调用；Channel已经连接/绑定并且已经就绪 |
+| channelInactive           | 当Channel离开活动状态并且不再连接远程节点时被调用            |
+| channelRead               | 当从Channel中读取数据时被调用                                |
+| channelReadComplete       | 当Channel上的一个读操作完成时被调用                          |
+| userEventTriggered        | 当ChannelInboundHandler.fireUserEventTriggered()方法被调用时调用，因为一个POJO被传经了ChannelPipeline |
+| channelWritabilityChanged | 当 Channel 的可写状态发生改变时被调用。                      |
+
+![image-20201203235842546](img/image-20201203235842546.png)
+
+ChannelInboundHandlerAdapter需要显示的释放资源，比如ReferenceCountUtil.release(msg)
+
+SimpleChannelInboundHandler则不需要任何显示的资源释放，因为它帮你自动释放了
+
+###### 1.4. ChannelOutboundHandler接口
+
+| 类型                                                         | 描述                                              |
+| ------------------------------------------------------------ | ------------------------------------------------- |
+| bind(ChannelHandlerContext ctx, SocketAddress localAddress, ChannelPromise promise) | 当请求将Channel绑定到本地地址时被调用             |
+| connect(ChannelHandlerContext ctx, SocketAddress remoteAddress,         SocketAddress localAddress, ChannelPromise promise) | 当请求将Channel连接到远程节点时调用               |
+| disconnect(ChannelHandlerContext ctx, ChannelPromise promise) | 当请求从远程节点断开时被调用                      |
+| close(ChannelHandlerContext ctx, ChannelPromise promise)     | 当请求关闭Channel时被调用                         |
+| deregister(ChannelHandlerContext ctx, ChannelPromise promise) | 当请求从它的EventLoop注销时被调用                 |
+| read(ChannelHandlerContext ctx)                              | 当请求从Channel读取更多的数据时被调用             |
+| write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) | 当请求通过Channel将数据写到远程节点时被调用       |
+| flush(ChannelHandlerContext ctx)                             | 当请求通过Channel将入队数据冲刷到远程节点时被调用 |
+
+**ChannelPromise**: 是ChannelFuture的一个子类，其定义了一些可写的方法，入setSuccess()和setFailure()，从而使ChannelFuture不可变。
+
+###### 1.5 ChannelHandler适配器
+
+![image-20201204004332540](img/image-20201204004332540.png)
+
+你可以使用 ChannelInboundHandlerAdapter 和 ChannelOutboundHandlerAdapter类作为自己的ChannelHandler 的起始点。这两个适配器分别提供了ChannelInboundHandler和 ChannelOutboundHandler 的基本实现。通过扩展抽象类 ChannelHandlerAdapter，它们获得了它们共同的超接口ChannelHandler 的方法。
+
+ChannelHandlerAdapter 还提供了实用方法 isSharable()。如果其对应的实现被标注为 Sharable，那么这个方法将返回 true，表示它可以被添加到多个 ChannelPipeline中。
+
+在 ChannelInboundHandlerAdapter 和 ChannelOutboundHandlerAdapter 中所提供的方法体调用了其相关联的 ChannelHandlerContext 上的等效方法，从而将事件转发到了 ChannelPipeline 中的下一个 ChannelHandler 中。
+
+##### 2. ChannelPipeline接口
+
+**ChannleHandlerContext:**  ChannelHandlerContext使得ChannelHandler能够和它的ChannelPipeline以及其他的ChannelHandler交互。ChannelHandler可以通知其 所属的ChannelPipeline中的下一个ChannelHandler，甚至可以动态修改它所属的ChannelPipeline。
+
+![image-20201205191812446](img/image-20201205191812446.png)
+
+**ChannelPipeline的过滤筛选**
+
+在 ChannelPipeline 传播事件时，它会测试 ChannelPipeline 中的下一个 ChannelHandler 的类型是否和事件的运动方向相匹配。如果不匹配，ChannelPipeline 将跳过该ChannelHandler 并前进到下一个，直到它找到和该事件所期望的方向相匹配的为止。
+
+###### 2.1 修改ChannelPipeline
+
+​													ChannelHandler的用于修改ChannelPipeline的方法
+
+| 名称                                | 描述                                                         |
+| ----------------------------------- | ------------------------------------------------------------ |
+| addFirst,addLast,addBefore,addAfter | 将一个 ChannelHandler 添加到 ChannelPipeline 中              |
+| remove                              | 将一个 ChannelHandler 从 ChannelPipeline 中移除              |
+| replace                             | 将 ChannelPipeline中的一个 ChannelHandler 替换为另一个 ChannelHandler |
+
+![image-20201205195916893](img/image-20201205195916893.png)
+
+**ChannelHandler 的执行和阻塞**: 通常 ChannelPipeline 中的每一个 ChannelHandler 都是通过它的 EventLoop（I/O 线程）来处理传递给它的事件的。所以至关重要的是不要阻塞这个线程，因为这会对整体的 I/O 处理产生负面的影响。可以使用netty提供的 `DefaultEventExecutorGroup`进行处理。
+
+###### 2.2 触发事件
+
+**ChannelPipeline的入站操作**
+
+###### 					  ![image-20201205202618498](img/image-20201205202618498.png)													
+
+ChannelPipeline的出站操作
+
+![image-20201205202826258](img/image-20201205202826258.png)
+
+- ChannelPipeline保存了Channel相关联的ChannelHandler;
+- ChannelPipeline可以根据需要，通过添加或删除ChannelHandler来动态地修改；
+- ChannelPipeline有着丰富的API可以被调用，以响应入站和出站事件
+
+##### 3. ChannelHandlerContext接口
+
+ChannelHandlerContext 代表了 ChannelHandler 和 ChannelPipeline 之间的关联，每当有 ChannelHandler 添加到 ChannelPipeline 中时，都会创建 ChannelHandlerContext。ChannelHandlerContext 的主要功能是管理它所关联的 ChannelHandler 和在同一个 ChannelPipeline 中的其他 ChannelHandler 之间的交互。
+
+相同方法的调用：
+
+Channel和ChannelPipeline: 会沿着整个ChannelPipeline传播
+
+ChannelHandlerContext: 从当前所关联的 ChannelHandler 开始，并且只会传播给位于该ChannelPipeline 中的下一个能够处理该事件的ChannelHandler
+
+![image-20201205204230623](img/image-20201205204230623.png)
+
+- ChannelHandlerContext和ChannelHandler之间的关联是不可变的，所以缓存对它的引用的安全的
+- 相对于其他类的同名方法，ChannelHandlerContext的方法将产生更短的事件流，应该尽可能地利用这个特性来获得最大的性能
+
+###### 3.1 使用ChannelHandlerContext
+
+![image-20201205211537126](img/image-20201205211537126.png)
+
+**从ChannelHandlerContext访问Channel**
+
+![image-20201205214844754](img/image-20201205214844754.png)
+
+**从ChannelHandlerContext访问ChannelPipeline**
+
+![image-20201205215008778](img/image-20201205215008778.png)
+
+事件流是一样的，从ChannelHandler的级别上看，事件从一个 ChannelHandler到下一个ChannelHandler 的移动是由 ChannelHandlerContext 上的调用完成的
+
+![image-20201205215228539](img/image-20201205215228539.png)
+
+为什么会想要从 ChannelPipeline 中的某个特定点开始传播事件呢？
+
+- 为了减少将事件传经对它不感兴趣的 ChannelHandler 所带来的开销
+- 为了避免将事件传经那些可能会对它感兴趣的 ChannelHandler
+
+想从指定ChannelHandler传播事件，获取该ChannelHandler的前一个Channelhandler关联的ChannelHandlerContext，调用write()方法将事件传播给该ChannelHandler
+
+![image-20201205215928052](img/image-20201205215928052.png)
+
+![image-20201205215842844](img/image-20201205215842844.png)
+
+##### 4. 异常处理
+
+###### 1. 处理入站异常
+
+如果在处理入站事件的过程中有异常被抛出，那么它将从它在 ChannelInboundHandler里被触发的那一点开始流经 ChannelPipeline。重写exceptionCaught()方法，捕获异常即可。如果你不实现任何处理入站异常的逻辑（或者没有消费该异常），那么异常会被传到pipeline末端，Netty将会记录该异常没有被处理的事实。
+
+![image-20201205221959288](img/image-20201205221959288.png)
+
+- ChannelHandler.exceptionCaught()的默认实现是简单地将当前异常转发给ChannelPipeline 中的下一个 ChannelHandler
+- 如果异常到达了 ChannelPipeline 的尾端，它将会被记录为未被处理
+- 要想定义自定义的处理逻辑，你需要重写 exceptionCaught()方法。然后你需要决定是否需要将该异常传播
+
+###### 2. 处理出站异常
+
+用于处理出站操作中的正常完成以及异常的选项，都基于以下的通知机制。
+
+- 每个出站操作都将返回一个 ChannelFuture。注册到 ChannelFuture 的 ChannelFutureListener 将在操作完成时被通知该操作是成功了还是出错了。
+- 几乎所有的 ChannelOutboundHandler 上的方法都会传入一个 ChannelPromise的实例。作为 ChannelFuture 的子类，ChannelPromise 也可以被分配用于异步通知的监听器。
+
+第一种方式：**添加ChannelFutureListener到ChannelFuture**
+
+![image-20201205230338069](img/image-20201205230338069.png)
+
+第二种方式：**将 ChannelFutureListener 添加到即将作为参数传递给 ChannelOutboundHandler 的方法的ChannelPromise**
+
+![image-20201205230101135](img/image-20201205230101135.png)
+
+在调用出站操作时添加 ChannelFutureListener 更合适（第一种方式），而对于一般的异常处理，自定义的ChannelOutboundHandler 实现的方式更加的简单（第二种方式）。
