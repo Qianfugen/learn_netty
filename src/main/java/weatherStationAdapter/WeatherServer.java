@@ -1,4 +1,4 @@
-package chapter2;
+package weatherStationAdapter;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
@@ -13,19 +13,18 @@ import java.net.InetSocketAddress;
 /**
  * 服务端
  */
-public class EchoServer {
+public class WeatherServer {
     private final int port;
 
-    public EchoServer(int port) {
+    public WeatherServer(int port) {
         this.port = port;
     }
 
     public static void main(String[] args) throws Exception {
-        new EchoServer(1234).start();
+        new WeatherServer(1234).start();
     }
 
     public void start() throws Exception {
-        final EchoServerHandler serverHandler = new EchoServerHandler();
         final EventLoopGroup group = new NioEventLoopGroup();
 
         try {
@@ -35,11 +34,11 @@ public class EchoServer {
                     .localAddress(new InetSocketAddress(port))
                     .childHandler(new ChannelInitializer<SocketChannel>() {
                         protected void initChannel(SocketChannel ch) throws Exception {
-                            ch.pipeline().addLast(serverHandler);
+                            ch.pipeline().addLast(new WeatherHandler());
                         }
                     });
             ChannelFuture cf = b.bind().sync();
-            System.out.println("EchoServer start...");
+            System.out.println("气象站模拟器已启动...");
             cf.channel().closeFuture().sync();
         } catch (Exception e) {
             e.printStackTrace();

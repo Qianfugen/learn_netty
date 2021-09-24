@@ -1,4 +1,4 @@
-package chapter2;
+package Thermo;
 
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.ChannelFuture;
@@ -13,17 +13,17 @@ import java.net.InetSocketAddress;
 /**
  * 客户端
  */
-public class EchoClient {
+public class ThermoClient {
     private final String host;
     private final int port;
 
-    public EchoClient(String host, int port) {
+    public ThermoClient(String host, int port) {
         this.host = host;
         this.port = port;
     }
 
     public static void main(String[] args) throws Exception {
-        EchoClient client = new EchoClient("127.0.0.1",1234);
+        ThermoClient client = new ThermoClient("172.16.13.45", 8234);
         client.start();
     }
 
@@ -36,11 +36,11 @@ public class EchoClient {
                     .remoteAddress(new InetSocketAddress(host, port))
                     .handler(new ChannelInitializer<SocketChannel>() {
                         protected void initChannel(SocketChannel ch) throws Exception {
-                            ch.pipeline().addLast(new EchoClientHandler());
+                            ch.pipeline().addLast(new ThermoHandler());
                         }
                     });
             ChannelFuture cf = b.connect().sync();
-            System.out.println("EchoClient start...");
+            System.out.println("ThermoClient start...");
             cf.channel().closeFuture().sync();
         } catch (Exception e) {
             e.printStackTrace();
