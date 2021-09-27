@@ -1,29 +1,26 @@
-package gasSensor;
+package demo.RFID;
 
+import demo.RFID.encode.RFIDCmdToByteMsgEncoder;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.SocketChannel;
-import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.channel.socket.nio.NioDatagramChannel;
 
 import java.net.InetSocketAddress;
 
-/**
- * 气体探测模拟器
- */
-public class GasClient {
+public class RFIDClient {
     private final String host;
     private final int port;
 
-    public GasClient(String host, int port) {
+    public RFIDClient(String host, int port) {
         this.host = host;
         this.port = port;
     }
 
     public static void main(String[] args) throws Exception {
-        GasClient client = new GasClient("172.16.10.30", 9435);
+        RFIDClient client = new RFIDClient("172.16.11.181", 1969);
         client.start();
     }
 
@@ -32,15 +29,17 @@ public class GasClient {
         try {
             Bootstrap b = new Bootstrap();
             b.group(group)
-                    .channel(NioSocketChannel.class)
+                    .channel(NioDatagramChannel.class)
                     .remoteAddress(new InetSocketAddress(host, port))
-                    .handler(new ChannelInitializer<SocketChannel>() {
-                        protected void initChannel(SocketChannel ch) throws Exception {
-                            ch.pipeline().addLast(new GasHandler());
+                    .handler(new ChannelInitializer<NioDatagramChannel>() {
+                        @Override
+                        protected void initChannel(NioDatagramChannel ch) throws Exception {
+                            ch.pipeline().addLast(new RFIDCmdToByteMsgEncoder());
+                            ch.pipeline().addLast(new RFIDHandler());
                         }
                     });
             ChannelFuture cf = b.connect().sync();
-            System.out.println("气体探测模拟器已启动...");
+            System.out.println("RFIDClient start...");
             cf.channel().closeFuture().sync();
         } catch (Exception e) {
             e.printStackTrace();
@@ -48,4 +47,5 @@ public class GasClient {
             group.shutdownGracefully().sync();
         }
     }
+
 }

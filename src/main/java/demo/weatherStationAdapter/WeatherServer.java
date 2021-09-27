@@ -1,4 +1,4 @@
-package weatherStationAdapter;
+package demo.weatherStationAdapter;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;

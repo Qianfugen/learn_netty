@@ -1,6 +1,6 @@
-package RFID.cmd;
+package demo.RFID.cmd;
 
-import RFID.RFIDCmd;
+import demo.RFID.RFIDCmd;
 
 import java.util.ArrayList;
 import java.util.List;

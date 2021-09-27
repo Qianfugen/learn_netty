@@ -1,6 +1,6 @@
-package RFID.encode;
+package demo.RFID.encode;
 
-import RFID.RFIDCmd;
+import demo.RFID.RFIDCmd;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;

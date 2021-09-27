@@ -1,4 +1,4 @@
-package RFID;
+package demo.RFID;
 
 /**
  * RFID通用命令

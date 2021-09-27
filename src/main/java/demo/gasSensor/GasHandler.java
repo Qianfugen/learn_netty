@@ -1,4 +1,4 @@
-package gasSensor;
+package demo.gasSensor;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;

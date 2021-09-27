@@ -1,4 +1,4 @@
-package Thermo;
+package demo.Thermo;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;

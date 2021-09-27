@@ -1,4 +1,4 @@
-package Thermo;
+package demo.Thermo;
 
 import lombok.SneakyThrows;
 

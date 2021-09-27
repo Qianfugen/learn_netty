@@ -1,4 +1,4 @@
-package Thermo;
+package demo.gasSensor;
 
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.ChannelFuture;
@@ -11,19 +11,19 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import java.net.InetSocketAddress;
 
 /**
- * 客户端
+ * 气体探测模拟器
  */
-public class ThermoClient {
+public class GasClient {
     private final String host;
     private final int port;
 
-    public ThermoClient(String host, int port) {
+    public GasClient(String host, int port) {
         this.host = host;
         this.port = port;
     }
 
     public static void main(String[] args) throws Exception {
-        ThermoClient client = new ThermoClient("172.16.13.45", 8234);
+        GasClient client = new GasClient("172.16.10.30", 9435);
         client.start();
     }
 
@@ -36,11 +36,11 @@ public class ThermoClient {
                     .remoteAddress(new InetSocketAddress(host, port))
                     .handler(new ChannelInitializer<SocketChannel>() {
                         protected void initChannel(SocketChannel ch) throws Exception {
-                            ch.pipeline().addLast(new ThermoHandler());
+                            ch.pipeline().addLast(new GasHandler());
                         }
                     });
             ChannelFuture cf = b.connect().sync();
-            System.out.println("ThermoClient start...");
+            System.out.println("气体探测模拟器已启动...");
             cf.channel().closeFuture().sync();
         } catch (Exception e) {
             e.printStackTrace();

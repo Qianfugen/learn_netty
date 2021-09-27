@@ -1,6 +1,6 @@
-package RFID.cmd;
+package demo.RFID.cmd;
 
-import RFID.RFIDCmd;
+import demo.RFID.RFIDCmd;
 
 /**
  * 读标签命令

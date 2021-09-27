@@ -1,4 +1,4 @@
-package usb;
+package demo.usb;
 
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.ChannelFactory;

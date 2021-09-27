@@ -1,8 +1,8 @@
-package RFID;
+package demo.RFID;
 
-import RFID.cmd.HeartBeatCmd;
-import RFID.cmd.ReadTagCmd;
-import RFID.cmd.WriteTagCmd;
+import demo.RFID.cmd.HeartBeatCmd;
+import demo.RFID.cmd.ReadTagCmd;
+import demo.RFID.cmd.WriteTagCmd;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.channel.ChannelHandlerContext;

@@ -1,26 +1,29 @@
-package RFID;
+package demo.Thermo;
 
-import RFID.encode.RFIDCmdToByteMsgEncoder;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.nio.NioDatagramChannel;
+import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.socket.nio.NioSocketChannel;
 
 import java.net.InetSocketAddress;
 
-public class RFIDClient {
+/**
+ * 客户端
+ */
+public class ThermoClient {
     private final String host;
     private final int port;
 
-    public RFIDClient(String host, int port) {
+    public ThermoClient(String host, int port) {
         this.host = host;
         this.port = port;
     }
 
     public static void main(String[] args) throws Exception {
-        RFIDClient client = new RFIDClient("172.16.11.181", 1969);
+        ThermoClient client = new ThermoClient("172.16.13.45", 8234);
         client.start();
     }
 
@@ -29,17 +32,15 @@ public class RFIDClient {
         try {
             Bootstrap b = new Bootstrap();
             b.group(group)
-                    .channel(NioDatagramChannel.class)
+                    .channel(NioSocketChannel.class)
                     .remoteAddress(new InetSocketAddress(host, port))
-                    .handler(new ChannelInitializer<NioDatagramChannel>() {
-                        @Override
-                        protected void initChannel(NioDatagramChannel ch) throws Exception {
-                            ch.pipeline().addLast(new RFIDCmdToByteMsgEncoder());
-                            ch.pipeline().addLast(new RFIDHandler());
+                    .handler(new ChannelInitializer<SocketChannel>() {
+                        protected void initChannel(SocketChannel ch) throws Exception {
+                            ch.pipeline().addLast(new ThermoHandler());
                         }
                     });
             ChannelFuture cf = b.connect().sync();
-            System.out.println("RFIDClient start...");
+            System.out.println("ThermoClient start...");
             cf.channel().closeFuture().sync();
         } catch (Exception e) {
             e.printStackTrace();
@@ -47,5 +48,4 @@ public class RFIDClient {
             group.shutdownGracefully().sync();
         }
     }
-
 }
