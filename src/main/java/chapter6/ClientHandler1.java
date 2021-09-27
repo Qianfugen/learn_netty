@@ -17,7 +17,7 @@ public class ClientHandler1 extends SimpleChannelInboundHandler<ByteBuf> {
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
         // 从ChannelHandlerContext访问Channel
         Channel channel = ctx.channel();
-        ChannelFuture cf = channel.writeAndFlush(Unpooled.copiedBuffer("hello,server", CharsetUtil.UTF_8));
+        final ChannelFuture cf = channel.writeAndFlush(Unpooled.copiedBuffer("hello,server", CharsetUtil.UTF_8));
         cf.addListener(new ChannelFutureListener() {
             @Override
             public void operationComplete(ChannelFuture future) throws Exception {
