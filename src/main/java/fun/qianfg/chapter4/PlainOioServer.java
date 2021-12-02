@@ -17,6 +17,7 @@ public class PlainOioServer {
                 System.out.println("Accepted connection from " + clientSocket);
 
                 new Thread(new Runnable() {
+                    @Override
                     public void run() {
                         OutputStream out = null;
                         try {
