@@ -1,5 +1,7 @@
 package fun.qianfg.chapter4;
 
+import io.netty.util.CharsetUtil;
+
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
@@ -8,21 +10,19 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
-import java.nio.charset.Charset;
 import java.util.Iterator;
 import java.util.Set;
 
 public class PlainNioServer {
-
-    public static void server(int port) throws Exception {
+    public static void main(String[] args) throws Exception {
         ServerSocketChannel serverChannel = ServerSocketChannel.open();
         serverChannel.configureBlocking(false);
         ServerSocket serverSocket = serverChannel.socket();
-        InetSocketAddress address = new InetSocketAddress(port);
+        InetSocketAddress address = new InetSocketAddress(1234);
         serverSocket.bind(address);
         Selector selector = Selector.open();
         serverChannel.register(selector, SelectionKey.OP_ACCEPT);
-        ByteBuffer msg = ByteBuffer.wrap("hello".getBytes(Charset.forName("UTF-8")));
+        ByteBuffer msg = ByteBuffer.wrap("hello".getBytes(CharsetUtil.UTF_8));
         while (true) {
             try {
                 selector.select();
@@ -60,9 +60,5 @@ public class PlainNioServer {
                 }
             }
         }
-    }
-
-    public static void main(String[] args) throws Exception {
-        server(1234);
     }
 }

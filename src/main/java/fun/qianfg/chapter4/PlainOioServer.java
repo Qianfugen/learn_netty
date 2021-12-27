@@ -1,16 +1,17 @@
 package fun.qianfg.chapter4;
 
+import io.netty.util.CharsetUtil;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.nio.charset.Charset;
 
 public class PlainOioServer {
-    public static void server(int port) throws Exception {
-        final ServerSocket serverSocket = new ServerSocket(port);
+    public static void main(String[] args) throws Exception {
+        final ServerSocket serverSocket = new ServerSocket(1234);
         try {
             while (true) {
                 final Socket clientSocket = serverSocket.accept();
@@ -28,7 +29,7 @@ public class PlainOioServer {
 
                             // 回传消息给客户端
                             out = clientSocket.getOutputStream();
-                            out.write("hello".getBytes(Charset.forName("UTF-8")));
+                            out.write("hello".getBytes(CharsetUtil.UTF_8));
                             out.flush();
                             clientSocket.close();
                         } catch (IOException e) {
@@ -46,9 +47,5 @@ public class PlainOioServer {
         } catch (IOException e) {
             e.printStackTrace();
         }
-    }
-
-    public static void main(String[] args) throws Exception {
-        server(1234);
     }
 }

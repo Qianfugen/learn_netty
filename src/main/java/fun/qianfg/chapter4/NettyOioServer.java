@@ -7,20 +7,19 @@ import io.netty.channel.*;
 import io.netty.channel.oio.OioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.oio.OioServerSocketChannel;
+import io.netty.util.CharsetUtil;
 
 import java.net.InetSocketAddress;
-import java.nio.charset.Charset;
 
 public class NettyOioServer {
-
-    public static void server(int port) throws Exception {
-        final ByteBuf buf = Unpooled.unreleasableBuffer(Unpooled.copiedBuffer("hello", Charset.forName("UTF-8")));
+    public static void main(String[] args) throws Exception {
+        final ByteBuf buf = Unpooled.unreleasableBuffer(Unpooled.copiedBuffer("hello", CharsetUtil.UTF_8));
         EventLoopGroup group = new OioEventLoopGroup();
         try {
             ServerBootstrap b = new ServerBootstrap();
             b.group(group)
                     .channel(OioServerSocketChannel.class)
-                    .localAddress(new InetSocketAddress(port))
+                    .localAddress(new InetSocketAddress(1234))
                     .childHandler(new ChannelInitializer<SocketChannel>() {
                         @Override
                         protected void initChannel(SocketChannel ch) throws Exception {
@@ -38,9 +37,5 @@ public class NettyOioServer {
         } finally {
             group.shutdownGracefully();
         }
-    }
-
-    public static void main(String[] args) throws Exception {
-        server(1234);
     }
 }
