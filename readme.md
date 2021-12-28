@@ -901,14 +901,14 @@ ChannelHandlerContext: 从当前所关联的 ChannelHandler 开始，并且只�
 
 - 将字节解码为消息：ByteToMessageDecoder 和 ReplayingDecoder
 - 将一种消息类型解码为另一种：MessageToMessageDecoder
-- 都需要重写decode(ChannelHandlerContext channelHandlerContext, ByteBuf in, List<Object> out)方法；
+- 都需要重写**decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out)**方法；
 
 ##### 2.1ByteToMessageDecoder 
 
 ```java
 public class ToIntegerDecoder extends ByteToMessageDecoder {
     @Override
-    protected void decode(ChannelHandlerContext channelHandlerContext, ByteBuf in, List<Object> out) {
+    protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
         System.out.println(ByteBufUtil.hexDump(in));
         //在调用 readInt()方法前不得不验证所输入的 ByteBuf 是否具有足够的数据有点繁琐
         if (in.readableBytes() >= 4) {
@@ -924,7 +924,7 @@ public class ToIntegerDecoder extends ByteToMessageDecoder {
 ```java
 public class ToInteger2Decoder extends ReplayingDecoder<Void> {
     @Override
-    protected void decode(ChannelHandlerContext channelHandlerContext, ByteBuf in, List<Object> out) {
+    protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
         ByteBufUtil.hexDump(in);
         //字节数不够，报错：java.lang.NegativeArraySizeException
         out.add(in.readInt());
@@ -937,7 +937,7 @@ public class ToInteger2Decoder extends ReplayingDecoder<Void> {
 ```java
 public class IntegerToStringDecoder extends MessageToMessageDecoder<Integer> {
     @Override
-    protected void decode(ChannelHandlerContext channelHandlerContext, Integer in, List<Object> out) {
+    protected void decode(ChannelHandlerContext ctx, Integer in, List<Object> out) {
         System.out.println("数字" + in + "转成字符串");
         out.add(String.valueOf(in));
     }
@@ -971,6 +971,196 @@ public class SafeByteToMessageDecoder extends ByteToMessageDecoder {
         cause.printStackTrace();
         ctx.close();
     }
+}
+```
+
+#### 3.编码器
+
+- 将消息编码为字节
+- 将消息编码为消息
+- 都需要重写**encode(ChannelHandlerContext ctx, Short msg, ByteBuf out)**方法
+
+##### 3.1MessageToByteEncoder
+
+```java
+public class ShortToByteEncoder extends MessageToByteEncoder<Short> {
+    @Override
+    protected void encode(ChannelHandlerContext ctx, Short msg, ByteBuf out) {
+        out.writeShort(msg);
+    }
+}
+```
+
+##### 3.2MessageToMessageEncoder
+
+```java
+public class IntegerToStringEncoder extends MessageToMessageEncoder<Integer> {
+    @Override
+    protected void encode(ChannelHandlerContext ctx, Integer msg, List<Object> out) {
+        out.add(String.valueOf(msg));
+    }
+}
+```
+
+##### 3.3其他
+
+还有netty自带的**ProtobufEncoder**等，处理了Google 的 Protocol Buffers 规范所定义的数据格式
+
+#### 4.编解码器
+
+同时实现了 ChannelInboundHandler 和 ChannelOutboundHandler 接口
+
+##### 4.1抽象类 ByteToMessageCodec
+
+任何的请求/响应协议都可以作为使用ByteToMessageCodec的理想选择。例如，在某个 SMTP的实现中，编解码器将读取传入字节，并将它们解码为一个自定义的消息类型，如 SmtpRequest, 而在接收端，当一个响应被创建时，将会产生一个SmtpResponse，其将被 编码回字节以便进行传输
+
+```java
+  @Override
+    public SMTPClientFutureListener<FutureResult<SMTPResponse>> getListener(SMTPClientSession session, SMTPRequest request) throws SMTPException {
+
+        String cmd = request.getCommand().toUpperCase(Locale.UK);
+        String arg = request.getArgument();
+        if (arg != null) {
+            arg = arg.toUpperCase(Locale.UK);
+        }
+        if (SMTPRequest.EHLO_COMMAND.equals(cmd)) {
+            return EhloResponseListener.INSTANCE;
+        } else if (SMTPRequest.HELO_COMMAND.equals(cmd)) {
+            return HeloResponseListener.INSTANCE;
+        } else if (SMTPRequest.MAIL_COMMAND.equals(cmd)) {
+            return MailResponseListener.INSTANCE;
+        } else if (SMTPRequest.RCPT_COMMAND.equals(cmd)) {
+            return RcptResponseListener.INSTANCE;
+        } else if (SMTPRequest.DATA_COMMAND.equals(cmd)) {
+            return DataResponseListener.INSTANCE;
+        } else if (SMTPRequest.STARTTLS_COMMAND.equals(cmd)) {
+            return StartTlsResponseListener.INSTANCE;
+        } else if (SMTPRequest.AUTH_COMMAND.equals(cmd) && arg != null) {
+            if (arg.equals(SMTPRequest.AUTH_PLAIN_ARGUMENT)) {
+                return AuthPlainResponseListener.INSTANCE;
+            } else if (arg.equals(SMTPRequest.AUTH_LOGIN_ARGUMENT)) {
+                return AuthLoginResponseListener.INSTANCE;
+            }
+        } else if (SMTPRequest.QUIT_COMMAND.equals(cmd)) {
+            return QuitResponseListener.INSTANCE;
+        }
+
+        throw new SMTPException("No valid callback found for request " + request);
+    }
+```
+
+##### 4.2抽象类 MessageToMessageCodec
+
+```java
+public class WebSocketConvertHandler extends MessageToMessageCodec<WebSocketFrame, WebSocketConvertHandler.MyWebSocketFrame> {
+    @Override
+    protected void encode(ChannelHandlerContext ctx, MyWebSocketFrame msg, List<Object> out) {
+        ByteBuf payload = msg.getData().duplicate().retain();
+        switch (msg.getType()) {
+            case BINARY:
+                out.add(new BinaryWebSocketFrame(payload));
+                break;
+            case CLOSE:
+                out.add(new CloseWebSocketFrame(true, 0, payload));
+                break;
+            case PING:
+                out.add(new PingWebSocketFrame(payload));
+                break;
+            case PONG:
+                out.add(new PongWebSocketFrame(payload));
+                break;
+            case TEXT:
+                out.add(new TextWebSocketFrame(payload));
+                break;
+            case CONTINUATION:
+                out.add(new ContinuationWebSocketFrame(payload));
+                break;
+            default:
+                throw new IllegalStateException("Unsupported websocket msg: " + msg);
+        }
+    }
+
+    @Override
+    protected void decode(ChannelHandlerContext ctx, WebSocketFrame msg, List<Object> out) {
+        ByteBuf payload = msg.content().duplicate().retain();
+        if (msg instanceof BinaryWebSocketFrame) {
+            out.add(new MyWebSocketFrame(MyWebSocketFrame.FrameType.BINARY, payload));
+        } else if (msg instanceof CloseWebSocketFrame) {
+            out.add(new MyWebSocketFrame(MyWebSocketFrame.FrameType.CLOSE, payload));
+        } else if (msg instanceof PingWebSocketFrame) {
+            out.add(new MyWebSocketFrame(MyWebSocketFrame.FrameType.PING, payload));
+        } else if (msg instanceof PongWebSocketFrame) {
+            out.add(new MyWebSocketFrame(MyWebSocketFrame.FrameType.PING, payload));
+        } else if (msg instanceof TextWebSocketFrame) {
+            out.add(new MyWebSocketFrame(MyWebSocketFrame.FrameType.TEXT, payload));
+        } else if (msg instanceof ContinuationWebSocketFrame) {
+            out.add(new MyWebSocketFrame(MyWebSocketFrame.FrameType.CONTINUATION, payload));
+        } else {
+            throw new IllegalStateException("Unsupported websocket msg: " + msg);
+        }
+
+    }
+
+    public static final class MyWebSocketFrame {
+        enum FrameType {
+            BINARY,
+            CLOSE,
+            PING,
+            PONG,
+            TEXT,
+            CONTINUATION
+        }
+
+        private final FrameType type;
+        private final ByteBuf data;
+
+        public MyWebSocketFrame(FrameType type, ByteBuf data) {
+            this.type = type;
+            this.data = data;
+        }
+
+        public FrameType getType() {
+            return type;
+        }
+
+        public ByteBuf getData() {
+            return data;
+        }
+    }
+}
+```
+
+##### 4.3CombinedChannelDuplexHandler 类
+
+```java
+public class CombineByteCharCodec extends CombinedChannelDuplexHandler<CombineByteCharCodec.ByteToCharDecoder, CombineByteCharCodec.CharToByteEncoder> {
+
+    public CombineByteCharCodec() {
+        super(new ByteToCharDecoder(), new CharToByteEncoder());
+    }
+
+    /**
+     * 解码器
+     */
+    static class ByteToCharDecoder extends ByteToMessageDecoder {
+        @Override
+        protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
+            while (in.readableBytes() >= 2) {
+                out.add(in.readChar());
+            }
+        }
+    }
+
+    /**
+     * 编码器
+     */
+    static class CharToByteEncoder extends MessageToByteEncoder<Character> {
+        @Override
+        protected void encode(ChannelHandlerContext ctx, Character msg, ByteBuf out) {
+            out.writeChar(msg);
+        }
+    }
+
 }
 ```
 

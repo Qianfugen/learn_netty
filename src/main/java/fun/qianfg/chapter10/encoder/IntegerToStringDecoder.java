@@ -14,7 +14,7 @@ import java.util.List;
  */
 public class IntegerToStringDecoder extends MessageToMessageDecoder<Integer> {
     @Override
-    protected void decode(ChannelHandlerContext channelHandlerContext, Integer in, List<Object> out) {
+    protected void decode(ChannelHandlerContext ctx, Integer in, List<Object> out) {
         System.out.println("数字" + in + "转成字符串");
         out.add(String.valueOf(in));
     }

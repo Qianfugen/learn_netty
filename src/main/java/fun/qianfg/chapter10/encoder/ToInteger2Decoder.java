@@ -16,7 +16,7 @@ import java.util.List;
  */
 public class ToInteger2Decoder extends ReplayingDecoder<Void> {
     @Override
-    protected void decode(ChannelHandlerContext channelHandlerContext, ByteBuf in, List<Object> out) {
+    protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
         ByteBufUtil.hexDump(in);
         //字节数不够，报错：java.lang.NegativeArraySizeException
         out.add(in.readInt());

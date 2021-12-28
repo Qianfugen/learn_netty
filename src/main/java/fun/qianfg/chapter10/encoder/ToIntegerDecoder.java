@@ -16,7 +16,7 @@ import java.util.List;
  */
 public class ToIntegerDecoder extends ByteToMessageDecoder {
     @Override
-    protected void decode(ChannelHandlerContext channelHandlerContext, ByteBuf in, List<Object> out) {
+    protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
         System.out.println(ByteBufUtil.hexDump(in));
         //在调用 readInt()方法前不得不验证所输入的 ByteBuf 是否具有足够的数据有点繁琐
         if (in.readableBytes() >= 4) {
