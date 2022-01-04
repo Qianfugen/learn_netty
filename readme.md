@@ -900,7 +900,7 @@ ChannelHandlerContext: 从当前所关联的 ChannelHandler 开始，并且只�
 
 缺点：不能消除上下文切换带来的开销，并且随线程数量增加而变得明显
 
-![image-20220104203014131](C:\Users\Administrator\IdeaProjects\learn_netty\img\image-20220104203014131.png)
+![image-20220104203014131](https://raw.githubusercontent.com/Qianfugen/blog-img/main/image-20220104203014131.png)
 
 #### 2.EventLoop接口
 
@@ -908,7 +908,7 @@ Netty 的 EventLoop 是协同设计的一部分，它采用了两个基本的 AP
 
 一个EventLoop由一个永不改变的Thread驱动，同时任务（Runnable或者Callable）可以直接提交给EventLoop实现，以立即执行或者调度执行。
 
-![image-20220104203739603](img\image-20220104203739603.png)
+![image-20220104203739603](https://raw.githubusercontent.com/Qianfugen/blog-img/main/image-20220104203739603.png)
 
 #### 3.FIFO
 
@@ -978,7 +978,7 @@ Netty线程模型的卓越性能取决于对于当前执行的Thread身份的确
 
 
 
-![image-20220104205902131](img\image-20220104205902131.png)
+![image-20220104205902131](https://raw.githubusercontent.com/Qianfugen/blog-img/main/image-20220104205902131.png)
 
 ##### 5.2EventLoop线程分配
 
@@ -988,7 +988,9 @@ EventLoopGroup为每个新建的Channel分配一个EventLoop（管理多个Chann
 
 一旦一个Channel被分配给了一个EventLoop，那么它整个生命周期都是用这个EventLoop及其绑定的线程，避免了线程安全和线程同步问题（有且仅有当前这一个线程）。
 
-![image-20220104211050089](img\image-20220104211050089.png)
+![image-20220104211050089](https://raw.githubusercontent.com/Qianfugen/blog-img/main/image-20220104211050089.png)
+
+
 
 ### Chapter10-编解码器
 
