@@ -889,6 +889,107 @@ ChannelHandlerContext: 从当前所关联的 ChannelHandler 开始，并且只�
 
 
 
+### Chapter7-EventLoop和线程模型
+
+#### 1.Executor线程模型
+
+- 从池的空闲线程列表选择一个Thread，并且指派它去运行一个已经提交的任务（一个Runable实现）
+- 当任务完成时，将该Thread返回列表，使其可被重用
+
+优点：池化和重用线程
+
+缺点：不能消除上下文切换带来的开销，并且随线程数量增加而变得明显
+
+![image-20220104203014131](C:\Users\Administrator\IdeaProjects\learn_netty\img\image-20220104203014131.png)
+
+#### 2.EventLoop接口
+
+Netty 的 EventLoop 是协同设计的一部分，它采用了两个基本的 API：并发和网络编程
+
+一个EventLoop由一个永不改变的Thread驱动，同时任务（Runnable或者Callable）可以直接提交给EventLoop实现，以立即执行或者调度执行。
+
+![image-20220104203739603](img\image-20220104203739603.png)
+
+#### 3.FIFO
+
+FIrst In First Out，事件和任务都是以先进先出（FIFO）的顺序执行，保证字节内容时按正确的顺序被处理。
+
+在Netty4中，所有的I/O操作和事件都由已经分配给了EventLoop的那个Thread进行处理。
+
+#### 4.任务调度
+
+调度一个任务以便稍后（延迟）执行或者周期性地执行
+
+##### 4.1JDK的API
+
+```java
+public class Test {
+    public static void main(String[] args) {
+        //10s后执行任务，一旦调度任务完成，就会关闭ScheduledExecutorService以释放资源
+        ScheduledExecutorService executor = Executors.newScheduledThreadPool(10);
+        executor.schedule(() -> System.out.println("10 seconds later"), 10, TimeUnit.SECONDS);
+        executor.shutdown();
+    }
+}
+```
+
+##### 4.2EventLoop
+
+```java
+public class Test2 {
+    public static void main(String[] args) throws Exception {
+        EventLoopGroup group = new NioEventLoopGroup();
+        try {
+            ServerBootstrap b = new ServerBootstrap();
+            b.group(group)
+                    .channel(NioServerSocketChannel.class)
+                    .localAddress(new InetSocketAddress(1234))
+                    .childHandler(new ChannelInitializer<SocketChannel>() {
+                        protected void initChannel(SocketChannel ch) {
+                            //do nothing, just test
+                        }
+                    });
+            ChannelFuture future = b.bind().sync();
+            System.out.println("NettyServer start...");
+            Channel ch = future.channel();
+            //使用 EventLoop 调度任务, 10s后执行任务，只执行一次
+//            ch.eventLoop().schedule(() -> System.out.println("10 seconds later"), 10, TimeUnit.SECONDS);
+            //使用 EventLoop 调度任务, 10s后任务， 每隔10s后执行任务
+            ch.eventLoop().scheduleAtFixedRate(() -> System.out.println("10 seconds later"), 10, 10, TimeUnit.SECONDS);
+            future.channel().closeFuture().sync();
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            group.shutdownGracefully().sync();
+        }
+    }
+}
+```
+
+#### 5.实现细节
+
+##### 5.1线程管理
+
+Netty线程模型的卓越性能取决于对于当前执行的Thread身份的确认，即确定它是否时分配给当前Channel和EventLoop的那一个线程。
+
+如果是，则将所提交的代码直接执行。否则，EventLoop调度该任务以便稍后执行，并将它放入内部队列。
+
+注意，不要将长时间运行的的任务放入执行队列，会阻塞IO线程，建议使用EventExecutor。
+
+
+
+![image-20220104205902131](img\image-20220104205902131.png)
+
+##### 5.2EventLoop线程分配
+
+相比于传统的IO 传输（一对一，即一个线程对应一个通道），EventLoop的异步传输（一对多，即一个线程对应多个通道）可以使用少量的线程来支撑大量的Channel，避免过多线程上文切换带来的额外开销。
+
+EventLoopGroup为每个新建的Channel分配一个EventLoop（管理多个Channel），使用事件循环（round-robin）方式进行分配以获取一个均衡的分布。
+
+一旦一个Channel被分配给了一个EventLoop，那么它整个生命周期都是用这个EventLoop及其绑定的线程，避免了线程安全和线程同步问题（有且仅有当前这一个线程）。
+
+![image-20220104211050089](img\image-20220104211050089.png)
+
 ### Chapter10-编解码器
 
 #### 1.概念
