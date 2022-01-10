@@ -990,6 +990,238 @@ EventLoopGroup为每个新建的Channel分配一个EventLoop（管理多个Chann
 
 ![image-20220104211050089](https://raw.githubusercontent.com/Qianfugen/blog-img/main/image-20220104211050089.png)
 
+### Chapter8-引导
+
+引导，即将ChannelPipeline、ChannelHandler、EventLoop组织配置，成为一个可以实际运行的应用
+
+
+
+![image-20220110202427957](https://raw.githubusercontent.com/Qianfugen/blog-img/main/image-20220110202427957.png)
+
+
+
+#### 8.1Bootstrap-引导客户端
+
+![image-20220110203343888](https://raw.githubusercontent.com/Qianfugen/blog-img/main/image-20220110203343888.png)
+
+![image-20220110203103764](img/image-20220110203103764.png)
+
+![image-20220110203115724](https://raw.githubusercontent.com/Qianfugen/blog-img/main/image-20220110203115724.png)
+
+```java
+public class ClientA {
+    public static void main(String[] args) {
+        Bootstrap bootstrap = new Bootstrap();
+        bootstrap.group(new NioEventLoopGroup())
+                .channel(NioSocketChannel.class)
+                .handler(new SimpleChannelInboundHandler<ByteBuf>() {
+                    @Override
+                    protected void channelRead0(ChannelHandlerContext ctx, ByteBuf byteBuf) throws Exception {
+                        System.out.println("Reveive data from ServerA: " + byteBuf.toString(CharsetUtil.UTF_8));
+                    }
+
+                    @Override
+                    public void channelActive(ChannelHandlerContext ctx) throws Exception {
+                        ctx.channel().eventLoop().scheduleAtFixedRate(() -> {
+                            ByteBuf data = Unpooled.copiedBuffer("Hello, I am ClientA", CharsetUtil.UTF_8);
+                            ctx.writeAndFlush(data);
+                        }, 0, 5, TimeUnit.SECONDS);
+                    }
+                });
+        ChannelFuture future = bootstrap.connect(new InetSocketAddress("127.0.0.1", 8080));
+        future.addListener((ChannelFutureListener) channelFuture -> {
+            if (channelFuture.isSuccess()) {
+                System.out.println("Connect success");
+            } else {
+                System.out.println("Connect failed");
+                channelFuture.cause().printStackTrace();
+            }
+        });
+
+    }
+}
+```
+
+#### 8.2ServerBootstrap-引导服务器
+
+![image-20220110203638620](https://raw.githubusercontent.com/Qianfugen/blog-img/main/image-20220110203638620.png)
+
+![image-20220110203746456](https://raw.githubusercontent.com/Qianfugen/blog-img/main/image-20220110203746456.png)
+
+```java
+public class ServerA {
+    public static void main(String[] args) {
+        EventLoopGroup bossGroup = new NioEventLoopGroup();
+        EventLoopGroup workGroup = new NioEventLoopGroup();
+        ServerBootstrap serverBootstrap = new ServerBootstrap();
+
+        //group、channel、childHandler三者是必须的，不然会导致IllegalStateException
+        serverBootstrap.group(bossGroup, workGroup)
+                .channel(NioServerSocketChannel.class)
+                .childHandler(new ChannelInitializer<SocketChannel>() {
+                    /**
+                     * ChannelInitializer是ChannelInboundHandlerAdapter子类，可以添加多个处理器
+                     * @param channel
+                     * @throws Exception
+                     */
+                    @Override
+                    protected void initChannel(SocketChannel channel) throws Exception {
+                        //可以继续添加处理器，解码器，编码器等等
+                        channel.pipeline().addLast(new ServerHandler());
+                    }
+                });
+        ChannelFuture future = serverBootstrap.bind(new InetSocketAddress(8080));
+        future.addListener((ChannelFutureListener) channelFuture -> {
+            if (channelFuture.isSuccess()) {
+                System.out.println("Server bound");
+            } else {
+                System.out.println("Bind attempt failed");
+                channelFuture.cause().printStackTrace();
+            }
+        });
+    }
+
+    /**
+     * 服务器端处理器
+     */
+    static class ServerHandler extends SimpleChannelInboundHandler<ByteBuf> {
+        private ChannelFuture connectFuture;
+
+        @Override
+        public void channelActive(ChannelHandlerContext ctx) throws Exception {
+            Bootstrap bootstrap = new Bootstrap();
+            //使用与分配给已被接受的子Channel相同的EventLoop
+            //ServerA与ServerB通信，ServerA将ServerB的消息转发给ClientA
+            bootstrap.group(ctx.channel().eventLoop())
+                    .channel(NioSocketChannel.class)
+                    .handler(new SimpleChannelInboundHandler<ByteBuf>() {
+                        @Override
+                        protected void channelRead0(ChannelHandlerContext channelHandlerContext, ByteBuf byteBuf) throws Exception {
+                            System.out.println("Reveived data from ServerB：" + byteBuf.toString(CharsetUtil.UTF_8));
+                            ByteBuf msg = Unpooled.copiedBuffer("Hello, I am ServerA", CharsetUtil.UTF_8);
+                            channelHandlerContext.writeAndFlush(msg);
+                            //将ServerB的消息转发给ClientA
+//                            System.out.println("before:" + byteBuf.refCnt());
+                            //SimpleChannelInboundHandler 它会自动进行一次释放(即引用计数减1),如果不想创建新的数据, 则可以直接在原对象里调用 byteBuf.retain() 进行引用计数加1
+                            byteBuf.retain();
+                            ctx.writeAndFlush(byteBuf);
+//                            System.out.println("after:" + byteBuf.refCnt());
+                        }
+                    });
+            connectFuture = bootstrap.connect(new InetSocketAddress("127.0.0.1", 1234));
+        }
+
+        @Override
+        protected void channelRead0(ChannelHandlerContext ctx, ByteBuf byteBuf) throws Exception {
+            if (connectFuture.isDone()) {
+                //当连接完成后，执行一些数据操作（如代理）
+                System.out.println("Reveived data from ClientA：" + byteBuf.toString(CharsetUtil.UTF_8));
+                ByteBuf data = Unpooled.copiedBuffer("Hello, ClientA", CharsetUtil.UTF_8);
+                ctx.writeAndFlush(data);
+            }
+        }
+    }
+}
+```
+
+```java
+public class ServerB {
+    public static void main(String[] args) {
+        EventLoopGroup bossGroup = new NioEventLoopGroup();
+        EventLoopGroup workGroup = new NioEventLoopGroup();
+        ServerBootstrap serverBootstrap = new ServerBootstrap();
+
+        serverBootstrap.group(bossGroup, workGroup)
+                .channel(NioServerSocketChannel.class)
+                .childHandler(new SimpleChannelInboundHandler<ByteBuf>() {
+                    @Override
+                    protected void channelRead0(ChannelHandlerContext channelHandlerContext, ByteBuf byteBuf) throws Exception {
+                        System.out.println("Reveive data from ServerA: " + byteBuf.toString(CharsetUtil.UTF_8));
+                    }
+
+                    @Override
+                    public void channelActive(ChannelHandlerContext ctx) throws Exception {
+                        ctx.channel().eventLoop().scheduleAtFixedRate(() -> {
+                            ByteBuf data = Unpooled.copiedBuffer("Hello, I am ServerB", CharsetUtil.UTF_8);
+                            ctx.writeAndFlush(data);
+                        }, 0, 5, TimeUnit.SECONDS);
+                    }
+                });
+        ChannelFuture future = serverBootstrap.bind(new InetSocketAddress(1234));
+        future.addListener((ChannelFutureListener) channelFuture -> {
+            if (channelFuture.isSuccess()) {
+                System.out.println("Server bound");
+            } else {
+                System.out.println("Bind attempt failed");
+                channelFuture.cause().printStackTrace();
+            }
+        });
+    }
+
+}
+```
+
+#### 8.3ChannelOption&Attr
+
+```java
+public class ClientB {
+    public static void main(String[] args) {
+        final AttributeKey<Integer> id = AttributeKey.newInstance("ID");
+        EventLoopGroup group = new NioEventLoopGroup();
+        Bootstrap bootstrap = new Bootstrap();
+        bootstrap.group(group)
+                .channel(NioSocketChannel.class)
+                .handler(new SimpleChannelInboundHandler<ByteBuf>() {
+                    @Override
+                    protected void channelRead0(ChannelHandlerContext ctx, ByteBuf byteBuf) throws Exception {
+                        System.out.println("Reviive data from ServerB: " + byteBuf.toString(CharsetUtil.UTF_8));
+                    }
+
+                    @Override
+                    public void channelRegistered(ChannelHandlerContext ctx) throws Exception {
+                        Integer idValue = ctx.channel().attr(id).get();
+                        System.out.println("idValue: " + idValue);
+                        //do something with the idValue
+                    }
+                });
+        ChannelFuture future = bootstrap.option(ChannelOption.SO_KEEPALIVE, true)
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000)
+                .attr(id, 123456)
+                .connect(new InetSocketAddress("127.0.0.1", 1234));
+        future.syncUninterruptibly();
+    }
+}
+```
+
+#### 8.4引导DatagramChannel
+
+```java
+public class ClientC {
+    public static void main(String[] args) {
+        EventLoopGroup group = new OioEventLoopGroup();
+        Bootstrap bootstrap = new Bootstrap();
+        bootstrap.group(group)
+                .channel(OioSocketChannel.class)
+                .handler(new SimpleChannelInboundHandler<ByteBuf>() {
+                    @Override
+                    protected void channelRead0(ChannelHandlerContext channelHandlerContext, ByteBuf byteBuf) throws Exception {
+                        System.out.println("Receive data: " + byteBuf.toString(CharsetUtil.UTF_8));
+                    }
+                });
+        //调用bind()方法，因为该协议是无连接的
+        ChannelFuture future = bootstrap.bind(new InetSocketAddress(0));
+        future.addListener((ChannelFutureListener) channelFuture -> {
+            if (channelFuture.isSuccess()) {
+                System.out.println("Channel bind");
+            } else {
+                System.out.println("bind attempt failed");
+                channelFuture.cause().printStackTrace();
+            }
+        });
+    }
+}
+```
+
 
 
 ### Chapter10-编解码器
