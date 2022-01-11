@@ -1224,6 +1224,222 @@ public class ClientC {
 
 
 
+### Chapter9-单元测试
+
+#### 9.1EmbeddedChannel
+
+Netty提供了一种特殊的Channel实现-EmbeddedChannel，专门用来对ChannelHandler进行单元测试
+
+![image-20220111235435043](https://raw.githubusercontent.com/Qianfugen/blog-img/main/image-20220111235435043.png)
+
+- 入站数据由 **ChannelInboundHandler** 处理，代表从远程节点读取的数据，使用Inbound()方法
+- 出站数据由 **ChannelOutboundHandler** 处理，代表将要写到远程节点的数据，使用Outbound()方法
+
+![image-20220111235804630](https://raw.githubusercontent.com/Qianfugen/blog-img/main/image-20220111235804630.png)
+
+#### 9.2测试入站消息
+
+待测试的入站处理器
+
+```java
+public class FixedLenghtFrameDecoder extends ByteToMessageDecoder {
+    private final int frameLength;
+
+    public FixedLenghtFrameDecoder(int frameLength) {
+        if (frameLength <= 0) {
+            throw new IllegalArgumentException("frameLength must be a positive integer: " + frameLength);
+        }
+        this.frameLength = frameLength;
+    }
+
+    @Override
+    protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
+        while (in.readableBytes() >= frameLength) {
+            ByteBuf byteBuf = in.readBytes(frameLength);
+            out.add(byteBuf);
+        }
+    }
+}
+```
+
+测试类
+
+```java
+public class FixedLenghtFrameDecoderTest {
+
+    @Test
+    public void testFramesDecoded() {
+        ByteBuf buf = Unpooled.buffer();
+        for (int i = 0; i < 9; i++) {
+            buf.writeByte(i);
+        }
+        ByteBuf input = buf.duplicate();
+        EmbeddedChannel channel = new EmbeddedChannel(new FixedLenghtFrameDecoder(3));
+
+        //write bytes
+        assertTrue(channel.writeInbound(input.retain()));
+        assertTrue(channel.finish());
+
+        //read bytes
+        ByteBuf read = (ByteBuf) channel.readInbound();
+        assertEquals(buf.readSlice(3), read);
+        read.release();
+
+        read = (ByteBuf) channel.readInbound();
+        assertEquals(buf.readSlice(3), read);
+        read.release();
+
+        read = (ByteBuf) channel.readInbound();
+        assertEquals(buf.readSlice(3), read);
+        read.release();
+
+        assertNull(channel.readInbound());
+
+    }
+
+    @Test
+    public void testFramesDecoded2() {
+        ByteBuf buf = Unpooled.buffer();
+        for (int i = 0; i < 9; i++) {
+            buf.writeByte(i);
+        }
+        ByteBuf input = buf.duplicate();
+        EmbeddedChannel channel = new EmbeddedChannel(new FixedLenghtFrameDecoder(3));
+
+        //write bytes
+        assertFalse(channel.writeInbound(input.readBytes(2)));
+        assertTrue(channel.writeInbound(input.readBytes(7)));
+        assertTrue(channel.finish());
+
+        //read bytes
+        ByteBuf read = (ByteBuf) channel.readInbound();
+        assertEquals(buf.readSlice(3), read);
+        read.release();
+
+        read = (ByteBuf) channel.readInbound();
+        assertEquals(buf.readSlice(3), read);
+        read.release();
+
+        read = (ByteBuf) channel.readInbound();
+        assertEquals(buf.readSlice(3), read);
+        System.out.println(ByteBufUtil.hexDump(read));
+        read.release();
+
+        assertNull(channel.readInbound());
+        buf.release();
+    }
+}
+```
+
+#### 9.3测试出站消息
+
+待测试的出站处理器
+
+```java
+public class AbsIntegerEncoder extends MessageToMessageEncoder<ByteBuf> {
+    @Override
+    protected void encode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
+        while (in.readableBytes() >= 4) {
+            int value = Math.abs(in.readInt());
+            out.add(value);
+        }
+    }
+}
+```
+
+测试类
+
+```java
+public class AbsIntegerEncoderTest {
+
+    @Test
+    public void testEncoded() {
+        ByteBuf buf = Unpooled.buffer();
+        for (int i = 1; i < 10; i++) {
+            buf.writeInt(i * -1);
+        }
+        EmbeddedChannel channel = new EmbeddedChannel(new AbsIntegerEncoder());
+        assertTrue(channel.writeOutbound(buf));
+        assertTrue(channel.finish());
+
+        //read bytes
+        for (Integer i = 1; i < 10; i++) {
+            assertEquals(i, channel.readOutbound());
+        }
+        assertNull(channel.readOutbound());
+    }
+}
+```
+
+#### 9.4测试异常处理
+
+待测试的异常处理
+
+```java
+public class FrameChunkDecoder extends ByteToMessageDecoder {
+    private final int maxFrameSize;
+
+    public FrameChunkDecoder(int maxFrameSize) {
+        if (maxFrameSize <= 0) {
+            throw new IllegalArgumentException("maxFrameSize must >= 0");
+        }
+        this.maxFrameSize = maxFrameSize;
+    }
+
+    @Override
+    protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
+        int readableBytes = in.readableBytes();
+        if (readableBytes > maxFrameSize) {
+            //如果帧超过限制，就丢弃
+            in.clear();
+            throw new TooLongFrameException();
+        }
+        ByteBuf byteBuf = in.readBytes(readableBytes);
+        out.add(byteBuf);
+    }
+}
+```
+
+测试类
+
+```java
+public class FrameChunkDecoderTest {
+
+    @Test
+    public void testFrameDecoded() {
+        ByteBuf buf = Unpooled.buffer();
+        for (int i = 0; i < 9; i++) {
+            buf.writeByte(i);
+        }
+        ByteBuf input = buf.duplicate();
+        EmbeddedChannel channel = new EmbeddedChannel(new FrameChunkDecoder(3));
+
+        //write bytes
+        assertTrue(channel.writeInbound(input.readBytes(2)));
+        try {
+            assertTrue(channel.writeInbound(input.readBytes(4)));
+            Assert.fail();
+        } catch (TooLongFrameException e) {
+//            e.printStackTrace();
+        }
+        assertTrue(channel.writeInbound(input.readBytes(3)));
+        assertTrue(channel.finish());
+
+        //read Bytes
+        ByteBuf read = (ByteBuf) channel.readInbound();
+        assertEquals(buf.readSlice(2), read);
+
+        read = (ByteBuf) channel.readInbound();
+        assertEquals(buf.skipBytes(4).readSlice(3), read);
+        read.release();
+        buf.release();
+    }
+
+}
+```
+
+
+
 ### Chapter10-编解码器
 
 #### 1.概念
