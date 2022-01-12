@@ -14,7 +14,7 @@ public class Test {
         NettyUdpClient nettyUdpClient = new NettyUdpClient(14325, 14325);
         ResponseFuture<ResponseMessage> responseFuture = nettyUdpClient.broadcast(new DeviceInformationRequest());
         try {
-            ResponseMessage response = responseFuture.getPromise().get(5, TimeUnit.SECONDS);
+            ResponseMessage response = responseFuture.getPromise().get(30, TimeUnit.SECONDS);
             log.info("接收到消息：{}", response.getMessage());
         } catch (Exception e) {
             e.printStackTrace();
